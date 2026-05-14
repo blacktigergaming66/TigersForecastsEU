@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<title>EU Severe Weather Forecast System</title>
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+
+<style>
+
+*{
+    margin:0;
+    padding:0;
+    box-sizing:border-box;
+    font-family:Arial,sans-serif;
+}
+
+body{
+    background:#0d1117;
+    color:white;
+}
+
+header{
+    background:#161b22;
+    padding:18px;
+    text-align:center;
+    font-size:28px;
+    font-weight:bold;
+    border-bottom:2px solid #30363d;
+}
+
+nav{
+    display:flex;
+    flex-wrap:wrap;
+    justify-content:center;
+    gap:10px;
+    padding:15px;
+    background:#111827;
+}
+
+nav button{
+    background:#2563eb;
+    border:none;
+    padding:12px 20px;
+    color:white;
+    border-radius:10px;
+    cursor:pointer;
+    font-weight:bold;
+}
+
+nav button:hover{
+    background:#1d4ed8;
+}
+
+.page{
+    display:none;
+    padding:20px;
+}
+
+.active{
+    display:block;
+}
+
+.map{
+    width:100%;
+    height:650px;
+    border-radius:12px;
+    margin-top:20px;
+    border:2px solid #30363d;
+}
+
+.save-btn{
+    background:#16a34a;
+    border:none;
+    padding:12px 20px;
+    border-radius:10px;
+    color:white;
+    font-weight:bold;
+    cursor:pointer;
+    margin-top:10px;
+}
+
+.save-btn:hover{
+    background:#15803d;
+}
+
+.legend{
+    background:#161b22;
+    margin-top:20px;
+    padding:15px;
+    border-radius:12px;
+}
+
+.no-info{
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    height:650px;
+    background:#111827;
+    border-radius:12px;
+    border:2px solid #30363d;
+    font-size:38px;
+    color:#6b7280;
+    font-weight:bold;
+    margin-top:20px;
+}
+
+.city-label{
+    position:absolute;
+    color:white;
+    font-size:13px;
+    font-weight:bold;
+}
+
+.forecast-image{
+    width:100%;
+    border-radius:12px;
+    border:2px solid #30363d;
+    margin-top:20px;
+}
+
+</style>
+</head>
+
+<body>
+
+<header>EU Severe Weather Forecast Platform</header>
+
+<nav>
+    <button onclick="showPage('forecastMap')">Forecast Map</button>
+    <button onclick="showPage('dynamicMapPage')">Dynamic Map</button>
+    <button onclick="showPage('customize')">Customize</button>
+    <button onclick="showPage('accuracy')">Accuracy</button>
+</nav>
+
+<!-- ========================= FORECAST MAP ========================= -->
+
+<div class="page active" id="forecastMap">
+
+<h2>European Forecast Map</h2>
+
+<div style="position:relative">
+
+<img class="forecast-image"
+src="https://upload.wikimedia.org/wikipedia/commons/5/59/Blank_map_of_Europe_dark.svg">
+
+<div class="city-label" style="top:24%; left:53%;">Berlin</div>
+<div class="city-label" style="top:32%; left:49%;">Paris</div>
+<div class="city-label" style="top:44%; left:56%;">Rome</div>
+<div class="city-label" style="top:19%; left:33%;">London</div>
+
+</div>
+
+</div>
+
+<!-- ========================= DYNAMIC MAP ========================= -->
+
+<div class="page" id="dynamicMapPage">
+<h2>Dynamic Map</h2>
+
+<input type="date" id="dynamicDate">
+<button class="save-btn" onclick="loadForecast()">Load Forecast</button>
+
+<div id="dynamicMap" class="map"></div>
+</div>
+
+<!-- ========================= CUSTOMIZE ========================= -->
+
+<div class="page" id="customize">
+
+<h2>Draw Forecast</h2>
+
+<div style="margin-top:10px;">
+
+<input type="date" id="forecastDate">
+
+<select id="riskLevel">
+<option>MRGL</option>
+<option>LOW</option>
+<option>SLGT</option>
+<option>ENH</option>
+<option>MDT</option>
+<option>HIGH</option>
+<option>SIG</option>
+</select>
+
+<button class="save-btn" onclick="endPolygon()">END POLYGON</button>
+<button class="save-btn" onclick="editLastPolygon()">EDIT LAST</button>
+<button class="save-btn" onclick="clearCurrentPolygon()">CLEAR</button>
+<button class="save-btn" onclick="saveForecast()">SAVE</button>
+
+</div>
+
+<div id="customMap" class="map"></div>
+
+</div>
+
+<!-- ========================= ACCURACY ========================= -->
+
+<div class="page" id="accuracy">
+
+<h2>Forecast Accuracy</h2>
+
+<input type="date" id="accuracyDate">
+<button class="save-btn" onclick="loadForecastAccuracy()">LOAD</button>
+
+<div class="no-info" id="noInfoBox">NO INFO</div>
+
+<div class="legend">
+<div id="loadedForecastInfo">No forecast selected.</div>
+</div>
+
+</div>
+
+<script>
+
+/* ========================= MAP INIT (FIXED) ========================= */
+
+const dynamicMap = L.map("dynamicMap").setView([54,15],4);
+L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png')
+.addTo(dynamicMap);
+
+const customMap = L.map("customMap").setView([54,15],4);
+L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png')
+.addTo(customMap);
+
+/* ========================= STATE ========================= */
+
+let draftPoints = [];
+let draftMarkers = [];
+let draftLayer = null;
+
+let savedPolygons = [];
+let dynamicLayers = [];
+
+/* ========================= COLORS ========================= */
+
+function getRiskColor(risk){
+    return {
+        MRGL:"#14532d",
+        LOW:"#22c55e",
+        SLGT:"#eab308",
+        ENH:"#f97316",
+        MDT:"#dc2626",
+        HIGH:"#ec4899",
+        SIG:"#000000"
+    }[risk] || "#22c55e";
+}
+
+/* ========================= UPDATE DRAFT ========================= */
+
+function updateDraft(){
+
+    if(draftLayer) customMap.removeLayer(draftLayer);
+
+    if(draftPoints.length < 2) return;
+
+    const risk = document.getElementById("riskLevel").value;
+
+    draftLayer = L.polygon(draftPoints,{
+        color:getRiskColor(risk),
+        fillColor:getRiskColor(risk),
+        fillOpacity:0.45,
+        dashArray:risk==="SIG"?"8,8":null,
+        weight:risk==="SIG"?4:2
+    }).addTo(customMap);
+}
+
+/* ========================= DRAW ========================= */
+
+customMap.on("click",(e)=>{
+
+    const p=[e.latlng.lat,e.latlng.lng];
+    draftPoints.push(p);
+
+    const m=L.marker(p,{draggable:true}).addTo(customMap);
+    draftMarkers.push(m);
+
+    m.on("drag",(ev)=>{
+        const i=draftMarkers.indexOf(m);
+        const ll=ev.target.getLatLng();
+        draftPoints[i]=[ll.lat,ll.lng];
+        updateDraft();
+    });
+
+    updateDraft();
+});
+
+/* ========================= END POLYGON ========================= */
+
+function endPolygon(){
+
+    if(draftPoints.length<3){
+        alert("Need at least 3 points");
+        return;
+    }
+
+    const risk=document.getElementById("riskLevel").value;
+
+    savedPolygons.push({
+        points:structuredClone(draftPoints),
+        risk:risk
+    });
+
+    L.polygon(draftPoints,{
+        color:getRiskColor(risk),
+        fillColor:getRiskColor(risk),
+        fillOpacity:0.45
+    }).addTo(customMap);
+
+    clearDraft();
+}
+
+/* ========================= CLEAR ========================= */
+
+function clearDraft(){
+
+    draftMarkers.forEach(m=>customMap.removeLayer(m));
+    draftMarkers=[];
+
+    if(draftLayer) customMap.removeLayer(draftLayer);
+    draftLayer=null;
+
+    draftPoints=[];
+}
+
+/* ========================= SAVE ========================= */
+
+function saveForecast(){
+
+    const date=document.getElementById("forecastDate").value;
+    if(!date) return alert("Select date");
+
+    localStorage.setItem("forecast_"+date,JSON.stringify(savedPolygons));
+
+    alert("Saved");
+}
+
+/* ========================= LOAD DYNAMIC ========================= */
+
+function loadForecast(){
+
+    const date=document.getElementById("dynamicDate").value;
+    if(!date) return alert("Select date");
+
+    const data=localStorage.getItem("forecast_"+date);
+
+    dynamicLayers.forEach(l=>dynamicMap.removeLayer(l));
+    dynamicLayers=[];
+
+    if(!data) return alert("No forecast");
+
+    JSON.parse(data).forEach(f=>{
+
+        const layer=L.polygon(f.points,{
+            color:getRiskColor(f.risk),
+            fillColor:getRiskColor(f.risk),
+            fillOpacity:0.45
+        }).addTo(dynamicMap);
+
+        dynamicLayers.push(layer);
+    });
+}
+
+/* ========================= PAGE SWITCH ========================= */
+
+function showPage(id){
+
+    document.querySelectorAll(".page").forEach(p=>p.classList.remove("active"));
+    document.getElementById(id).classList.add("active");
+
+    setTimeout(()=>{
+        customMap.invalidateSize();
+        dynamicMap.invalidateSize();
+    },200);
+}
+
+</script>
+
+</body>
+</html>
