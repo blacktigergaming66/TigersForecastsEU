@@ -5,10 +5,11 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-<title>EU Severe Weather Forecast System</title>
+<title>TECOF - Tiger's European Convective Outlook Forecast</title>
 
 <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet-editable@1.2.0/src/Leaflet.Editable.js"></script>
 
 <style>
 
@@ -35,7 +36,6 @@ header{
 
 nav{
     display:flex;
-    flex-wrap:wrap;
     justify-content:center;
     gap:10px;
     padding:15px;
@@ -49,11 +49,6 @@ nav button{
     color:white;
     border-radius:10px;
     cursor:pointer;
-    font-weight:bold;
-}
-
-nav button:hover{
-    background:#1d4ed8;
 }
 
 .page{
@@ -76,51 +71,11 @@ nav button:hover{
 .save-btn{
     background:#16a34a;
     border:none;
-    padding:12px 20px;
-    border-radius:10px;
+    padding:10px 15px;
+    border-radius:8px;
     color:white;
-    font-weight:bold;
+    margin:5px;
     cursor:pointer;
-    margin-top:10px;
-}
-
-.save-btn:hover{
-    background:#15803d;
-}
-
-.legend{
-    background:#161b22;
-    margin-top:20px;
-    padding:15px;
-    border-radius:12px;
-}
-
-.no-info{
-    display:flex;
-    align-items:center;
-    justify-content:center;
-    height:650px;
-    background:#111827;
-    border-radius:12px;
-    border:2px solid #30363d;
-    font-size:38px;
-    color:#6b7280;
-    font-weight:bold;
-    margin-top:20px;
-}
-
-.city-label{
-    position:absolute;
-    color:white;
-    font-size:13px;
-    font-weight:bold;
-}
-
-.forecast-image{
-    width:100%;
-    border-radius:12px;
-    border:2px solid #30363d;
-    margin-top:20px;
 }
 
 </style>
@@ -128,57 +83,37 @@ nav button:hover{
 
 <body>
 
-<header>EU Severe Weather Forecast Platform</header>
+<header>TECOF - Tiger's European Convective Outlook Forecast</header>
 
 <nav>
-    <button onclick="showPage('forecastMap')">Forecast Map</button>
-    <button onclick="showPage('dynamicMapPage')">Dynamic Map</button>
-    <button onclick="showPage('customize')">Customize</button>
-    <button onclick="showPage('accuracy')">Accuracy</button>
+    <button onclick="showPage('dynamicPage')">Dynamic Map</button>
+    <button onclick="showPage('customPage')">Customize</button>
 </nav>
 
-<!-- ========================= FORECAST MAP ========================= -->
+<!-- DYNAMIC MAP -->
+<div class="page active" id="dynamicPage">
 
-<div class="page active" id="forecastMap">
-
-<h2>European Forecast Map</h2>
-
-<div style="position:relative">
-
-<img class="forecast-image"
-src="https://upload.wikimedia.org/wikipedia/commons/5/59/Blank_map_of_Europe_dark.svg">
-
-<div class="city-label" style="top:24%; left:53%;">Berlin</div>
-<div class="city-label" style="top:32%; left:49%;">Paris</div>
-<div class="city-label" style="top:44%; left:56%;">Rome</div>
-<div class="city-label" style="top:19%; left:33%;">London</div>
-
-</div>
-
-</div>
-
-<!-- ========================= DYNAMIC MAP ========================= -->
-
-<div class="page" id="dynamicMapPage">
 <h2>Dynamic Map</h2>
 
-<input type="date" id="dynamicDate">
+<input type="date" id="loadDate">
 <button class="save-btn" onclick="loadForecast()">Load Forecast</button>
 
 <div id="dynamicMap" class="map"></div>
 </div>
 
-<!-- ========================= CUSTOMIZE ========================= -->
+<!-- CUSTOM -->
+<div class="page" id="customPage">
 
-<div class="page" id="customize">
+<h2>Customize Forecast</h2>
 
-<h2>Draw Forecast</h2>
+<input type="password" id="pass" placeholder="Password">
+<button class="save-btn" onclick="unlock()">Unlock</button>
 
-<div style="margin-top:10px;">
+<br><br>
 
-<input type="date" id="forecastDate">
+<input type="date" id="saveDate">
 
-<select id="riskLevel">
+<select id="risk">
 <option>MRGL</option>
 <option>LOW</option>
 <option>SLGT</option>
@@ -188,58 +123,58 @@ src="https://upload.wikimedia.org/wikipedia/commons/5/59/Blank_map_of_Europe_dar
 <option>SIG</option>
 </select>
 
-<button class="save-btn" onclick="endPolygon()">END POLYGON</button>
-<button class="save-btn" onclick="editLastPolygon()">EDIT LAST</button>
-<button class="save-btn" onclick="clearCurrentPolygon()">CLEAR</button>
-<button class="save-btn" onclick="saveForecast()">SAVE</button>
+<br>
 
-</div>
+<button class="save-btn" onclick="endPoly()">END POLYGON</button>
+<button class="save-btn" onclick="editModeOn()">EDIT</button>
+<button class="save-btn" onclick="clearDraft()">CLEAR</button>
+<button class="save-btn" onclick="save()">SAVE</button>
+<button class="save-btn" onclick="exportGeo()">EXPORT GEOJSON</button>
+
+<input type="file" onchange="importGeo(event)">
 
 <div id="customMap" class="map"></div>
-
-</div>
-
-<!-- ========================= ACCURACY ========================= -->
-
-<div class="page" id="accuracy">
-
-<h2>Forecast Accuracy</h2>
-
-<input type="date" id="accuracyDate">
-<button class="save-btn" onclick="loadForecastAccuracy()">LOAD</button>
-
-<div class="no-info" id="noInfoBox">NO INFO</div>
-
-<div class="legend">
-<div id="loadedForecastInfo">No forecast selected.</div>
-</div>
-
 </div>
 
 <script>
 
-/* ========================= MAP INIT (FIXED) ========================= */
+/* =========================
+MAPS
+========================= */
 
 const dynamicMap = L.map("dynamicMap").setView([54,15],4);
-L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png')
-.addTo(dynamicMap);
+L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png').addTo(dynamicMap);
 
 const customMap = L.map("customMap").setView([54,15],4);
-L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png')
-.addTo(customMap);
+L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png').addTo(customMap);
 
-/* ========================= STATE ========================= */
+/* Editable support */
+customMap.editTools = new L.Editable(customMap);
 
-let draftPoints = [];
-let draftMarkers = [];
-let draftLayer = null;
+/* =========================
+AUTH SYSTEM
+========================= */
 
-let savedPolygons = [];
+const PASSWORD = "TECOFTIGER";
+let unlocked = false;
+let editMode = false;
+
+/* =========================
+STATE
+========================= */
+
+let points = [];
+let markers = [];
+let draft = null;
+
+let polygons = [];
 let dynamicLayers = [];
 
-/* ========================= COLORS ========================= */
+/* =========================
+COLOR SYSTEM
+========================= */
 
-function getRiskColor(risk){
+function color(r){
     return {
         MRGL:"#14532d",
         LOW:"#22c55e",
@@ -248,132 +183,255 @@ function getRiskColor(risk){
         MDT:"#dc2626",
         HIGH:"#ec4899",
         SIG:"#000000"
-    }[risk] || "#22c55e";
+    }[r] || "#22c55e";
 }
 
-/* ========================= UPDATE DRAFT ========================= */
+/* =========================
+UNLOCK SYSTEM
+========================= */
 
-function updateDraft(){
+function unlock(){
+    const input = document.getElementById("pass").value;
 
-    if(draftLayer) customMap.removeLayer(draftLayer);
-
-    if(draftPoints.length < 2) return;
-
-    const risk = document.getElementById("riskLevel").value;
-
-    draftLayer = L.polygon(draftPoints,{
-        color:getRiskColor(risk),
-        fillColor:getRiskColor(risk),
-        fillOpacity:0.45,
-        dashArray:risk==="SIG"?"8,8":null,
-        weight:risk==="SIG"?4:2
-    }).addTo(customMap);
+    if(input === PASSWORD){
+        unlocked = true;
+        alert("Unlocked TECOF system");
+    } else {
+        unlocked = false;
+        alert("Wrong password");
+    }
 }
 
-/* ========================= DRAW ========================= */
+/* =========================
+DRAWING (LOCKED)
+========================= */
 
-customMap.on("click",(e)=>{
+customMap.on("click", e => {
 
-    const p=[e.latlng.lat,e.latlng.lng];
-    draftPoints.push(p);
+    if(!unlocked) return;
 
-    const m=L.marker(p,{draggable:true}).addTo(customMap);
-    draftMarkers.push(m);
+    let p = [e.latlng.lat, e.latlng.lng];
+    points.push(p);
 
-    m.on("drag",(ev)=>{
-        const i=draftMarkers.indexOf(m);
-        const ll=ev.target.getLatLng();
-        draftPoints[i]=[ll.lat,ll.lng];
-        updateDraft();
+    let m = L.marker(p,{draggable:true}).addTo(customMap);
+    markers.push(m);
+
+    m.on("drag", ev => {
+        if(!unlocked) return;
+
+        let i = markers.indexOf(m);
+        let ll = ev.target.getLatLng();
+        points[i] = [ll.lat,ll.lng];
+        draw();
     });
 
-    updateDraft();
+    draw();
 });
 
-/* ========================= END POLYGON ========================= */
+function draw(){
 
-function endPolygon(){
+    if(draft) customMap.removeLayer(draft);
+    if(points.length < 2) return;
 
-    if(draftPoints.length<3){
-        alert("Need at least 3 points");
-        return;
-    }
-
-    const risk=document.getElementById("riskLevel").value;
-
-    savedPolygons.push({
-        points:structuredClone(draftPoints),
-        risk:risk
-    });
-
-    L.polygon(draftPoints,{
-        color:getRiskColor(risk),
-        fillColor:getRiskColor(risk),
-        fillOpacity:0.45
+    draft = L.polygon(points,{
+        color: color(document.getElementById("risk").value),
+        fillOpacity: 0.4
     }).addTo(customMap);
+}
+
+/* =========================
+END POLYGON (LOCKED)
+========================= */
+
+function endPoly(){
+
+    if(!unlocked) return alert("Locked");
+
+    if(points.length < 3) return alert("Need 3 points");
+
+    let risk = document.getElementById("risk").value;
+
+    let poly = L.polygon(points,{
+        color: color(risk),
+        fillOpacity: 0.4
+    }).addTo(customMap);
+
+    polygons.push({layer: poly, risk});
+
+    poly.on("click", () => {
+        if(editMode) select(poly);
+    });
 
     clearDraft();
 }
 
-/* ========================= CLEAR ========================= */
+/* =========================
+CLEAR
+========================= */
 
 function clearDraft(){
 
-    draftMarkers.forEach(m=>customMap.removeLayer(m));
-    draftMarkers=[];
+    markers.forEach(m => customMap.removeLayer(m));
+    markers = [];
 
-    if(draftLayer) customMap.removeLayer(draftLayer);
-    draftLayer=null;
+    points = [];
 
-    draftPoints=[];
+    if(draft) customMap.removeLayer(draft);
+    draft = null;
 }
 
-/* ========================= SAVE ========================= */
+/* =========================
+EDIT MODE (LOCKED)
+========================= */
 
-function saveForecast(){
+function editModeOn(){
 
-    const date=document.getElementById("forecastDate").value;
-    if(!date) return alert("Select date");
+    if(!unlocked){
+        alert("Enter password first");
+        return;
+    }
 
-    localStorage.setItem("forecast_"+date,JSON.stringify(savedPolygons));
+    editMode = true;
+    alert("Click a polygon to edit");
+}
+
+function select(poly){
+
+    if(!editMode) return;
+
+    poly.editing.enable();
+
+    poly.on("editable:vertex:dragend", () => {
+        console.log("updated polygon");
+    });
+
+    alert("Editing enabled");
+    editMode = false;
+}
+
+/* =========================
+SAVE (LOCKED)
+========================= */
+
+function save(){
+
+    if(!unlocked) return alert("Locked");
+
+    let date = document.getElementById("saveDate").value;
+    if(!date) return alert("Pick date");
+
+    let data = polygons.map(p => ({
+        risk: p.risk,
+        points: p.layer.getLatLngs()[0]
+    }));
+
+    localStorage.setItem("f_"+date, JSON.stringify(data));
 
     alert("Saved");
 }
 
-/* ========================= LOAD DYNAMIC ========================= */
+/* =========================
+LOAD (LOCKED)
+========================= */
 
 function loadForecast(){
 
-    const date=document.getElementById("dynamicDate").value;
-    if(!date) return alert("Select date");
+    if(!unlocked) return alert("Locked");
 
-    const data=localStorage.getItem("forecast_"+date);
+    let d = document.getElementById("loadDate").value;
+    let data = localStorage.getItem("f_"+d);
 
-    dynamicLayers.forEach(l=>dynamicMap.removeLayer(l));
-    dynamicLayers=[];
+    if(!data) return alert("No data");
 
-    if(!data) return alert("No forecast");
+    dynamicLayers.forEach(l => dynamicMap.removeLayer(l));
+    dynamicLayers = [];
 
-    JSON.parse(data).forEach(f=>{
+    JSON.parse(data).forEach(f => {
 
-        const layer=L.polygon(f.points,{
-            color:getRiskColor(f.risk),
-            fillColor:getRiskColor(f.risk),
-            fillOpacity:0.45
+        let poly = L.polygon(f.points,{
+            color: color(f.risk),
+            fillOpacity: 0.4
         }).addTo(dynamicMap);
 
-        dynamicLayers.push(layer);
+        dynamicLayers.push(poly);
     });
 }
 
-/* ========================= PAGE SWITCH ========================= */
+/* =========================
+EXPORT GEOJSON (LOCKED)
+========================= */
+
+function exportGeo(){
+
+    if(!unlocked) return alert("Locked");
+
+    let geo = {
+        type:"FeatureCollection",
+        features: polygons.map(p => ({
+            type:"Feature",
+            properties:{risk:p.risk},
+            geometry:{
+                type:"Polygon",
+                coordinates:[p.layer.getLatLngs()[0].map(x=>[x.lng,x.lat])]
+            }
+        }))
+    };
+
+    let blob = new Blob([JSON.stringify(geo,null,2)]);
+    let a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "tecof.geojson";
+    a.click();
+}
+
+/* =========================
+IMPORT GEOJSON (LOCKED)
+========================= */
+
+function importGeo(e){
+
+    if(!unlocked) return alert("Locked");
+
+    let r = new FileReader();
+
+    r.onload = ev => {
+
+        let data = JSON.parse(ev.target.result);
+
+        data.features.forEach(f => {
+
+            let pts = f.geometry.coordinates[0]
+                .map(x => [x[1],x[0]]);
+
+            let poly = L.polygon(pts,{
+                color: color(f.properties.risk),
+                fillOpacity: 0.4
+            }).addTo(customMap);
+
+            polygons.push({
+                layer: poly,
+                risk: f.properties.risk
+            });
+        });
+
+        alert("Imported");
+    };
+
+    r.readAsText(e.target.files[0]);
+}
+
+/* =========================
+PAGE SWITCH
+========================= */
 
 function showPage(id){
 
-    document.querySelectorAll(".page").forEach(p=>p.classList.remove("active"));
+    document.querySelectorAll(".page")
+        .forEach(p => p.classList.remove("active"));
+
     document.getElementById(id).classList.add("active");
 
-    setTimeout(()=>{
+    setTimeout(() => {
         customMap.invalidateSize();
         dynamicMap.invalidateSize();
     },200);
