@@ -5,7 +5,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-<title>TECOF - Forecast System</title>
+<title>TECOF - Tiger's European Convective Outlook Forecast</title>
 
 <link rel="stylesheet"
 href="https://unpkg.com/leaflet/dist/leaflet.css"/>
@@ -115,12 +115,36 @@ nav button:hover{
     background:#1d4ed8;
 }
 
+.sig-box{
+    margin-top:20px;
+    background:#161b22;
+    border:2px solid #30363d;
+    border-radius:12px;
+    padding:15px;
+}
+
+.sig-entry{
+    margin-top:15px;
+}
+
+.sig-entry textarea{
+    width:100%;
+    height:100px;
+    background:#0d1117;
+    border:1px solid #30363d;
+    color:white;
+    padding:10px;
+    border-radius:8px;
+    resize:vertical;
+    margin-top:8px;
+}
+
 </style>
 </head>
 
 <body>
 
-<header>TECOF Forecast System</header>
+<header>TECOF - European Convective Outlook Forecast</header>
 
 <nav>
 
@@ -229,10 +253,6 @@ DOWNLOAD RISKS ONLY
 <input type="file"
 onchange="importGeo(event)">
 
-<!-- =========================
-MODEL LINKS
-========================= -->
-
 <div class="model-links">
 
 <h3>Forecast Model Links</h3>
@@ -260,6 +280,18 @@ SCC
 </div>
 
 <div id="customMap" class="map"></div>
+
+<!-- =========================
+SIG DESCRIPTIONS
+========================= -->
+
+<div class="sig-box">
+
+<h3>SIG Zone Descriptions</h3>
+
+<div id="sigDescriptions"></div>
+
+</div>
 
 </div>
 
@@ -312,7 +344,6 @@ function unlock(){
             "customizationPanel"
         ).style.display = "block";
 
-        /* FIX BROKEN LEAFLET MAP */
         setTimeout(() => {
             customMap.invalidateSize();
         }, 200);
@@ -406,17 +437,22 @@ function draw(){
 
     if(points.length<2) return;
 
+    let risk =
+    document.getElementById("risk").value;
+
     draft=L.polygon(points,{
 
-        color:color(
-            document.getElementById("risk").value
-        ),
+        color:color(risk),
 
-        fillColor:color(
-            document.getElementById("risk").value
-        ),
+        fillColor:color(risk),
 
-        fillOpacity:0.4
+        fillOpacity:0.35,
+
+        weight:risk === "SIG" ? 4 : 2,
+
+        dashArray:risk === "SIG"
+        ? "12 8"
+        : null
 
     }).addTo(customMap);
 }
@@ -435,25 +471,86 @@ function endPoly(){
         return;
     }
 
-    let risk=
+    let risk =
     document.getElementById("risk").value;
 
-    let poly=L.polygon(points,{
+    let poly = L.polygon(points,{
 
         color:color(risk),
+
         fillColor:color(risk),
-        fillOpacity:0.4
+
+        fillOpacity:0.35,
+
+        weight:risk === "SIG" ? 4 : 2,
+
+        dashArray:risk === "SIG"
+        ? "12 8"
+        : null
 
     }).addTo(customMap);
 
-    polygons.push({
+    const obj = {
 
         layer:poly,
-        risk:risk
+        risk:risk,
+        sigDescription:""
 
-    });
+    };
+
+    polygons.push(obj);
 
     poly.on("click",()=>select(poly));
+
+    poly.on("contextmenu",()=>{
+
+        if(obj.risk !== "SIG") return;
+
+        alert(
+            obj.sigDescription ||
+            "No SIG description."
+        );
+    });
+
+    /* CREATE SIG TEXT BOX */
+
+    if(risk === "SIG"){
+
+        const sigCount =
+        polygons.filter(
+            p=>p.risk==="SIG"
+        ).length;
+
+        const wrap =
+        document.createElement("div");
+
+        wrap.className = "sig-entry";
+
+        wrap.innerHTML = `
+            <label>
+                <b>SIG ${sigCount}</b>
+            </label>
+
+            <textarea
+            placeholder="Write SIG reasoning here...">
+            </textarea>
+        `;
+
+        const textarea =
+        wrap.querySelector("textarea");
+
+        textarea.addEventListener(
+            "input",
+            ()=>{
+                obj.sigDescription =
+                textarea.value;
+            }
+        );
+
+        document.getElementById(
+            "sigDescriptions"
+        ).appendChild(wrap);
+    }
 
     clearDraft();
 }
@@ -533,6 +630,9 @@ function save(){
 
                 risk:p.risk,
 
+                sigDescription:
+                p.sigDescription || "",
+
                 points:
                 p.layer.getLatLngs()[0]
 
@@ -572,10 +672,31 @@ function loadForecast(){
         let layer=L.polygon(f.points,{
 
             color:color(f.risk),
+
             fillColor:color(f.risk),
-            fillOpacity:0.4
+
+            fillOpacity:0.35,
+
+            weight:f.risk === "SIG"
+            ? 4
+            : 2,
+
+            dashArray:f.risk === "SIG"
+            ? "12 8"
+            : null
 
         }).addTo(dynamicMap);
+
+        if(f.risk === "SIG"){
+
+            layer.on("contextmenu",()=>{
+
+                alert(
+                    f.sigDescription ||
+                    "No SIG description."
+                );
+            });
+        }
 
         dynamicLayers.push(layer);
     });
@@ -598,7 +719,9 @@ function exportGeo(){
             type:"Feature",
 
             properties:{
-                risk:p.risk
+                risk:p.risk,
+                sigDescription:
+                p.sigDescription || ""
             },
 
             geometry:{
@@ -649,28 +772,89 @@ function importGeo(e){
             f.geometry.coordinates[0]
             .map(x=>[x[1],x[0]]);
 
+            let risk =
+            f.properties.risk;
+
             let poly=L.polygon(pts,{
 
-                color:color(
-                    f.properties.risk
-                ),
+                color:color(risk),
 
-                fillColor:color(
-                    f.properties.risk
-                ),
+                fillColor:color(risk),
 
-                fillOpacity:0.4
+                fillOpacity:0.35,
+
+                weight:risk === "SIG"
+                ? 4
+                : 2,
+
+                dashArray:risk === "SIG"
+                ? "12 8"
+                : null
 
             }).addTo(customMap);
 
-            polygons.push({
+            const obj = {
 
                 layer:poly,
-                risk:f.properties.risk
+                risk:risk,
 
-            });
+                sigDescription:
+                f.properties.sigDescription || ""
+
+            };
+
+            polygons.push(obj);
 
             poly.on("click",()=>select(poly));
+
+            poly.on("contextmenu",()=>{
+
+                if(obj.risk !== "SIG") return;
+
+                alert(
+                    obj.sigDescription ||
+                    "No SIG description."
+                );
+            });
+
+            if(risk === "SIG"){
+
+                const sigCount =
+                polygons.filter(
+                    p=>p.risk==="SIG"
+                ).length;
+
+                const wrap =
+                document.createElement("div");
+
+                wrap.className =
+                "sig-entry";
+
+                wrap.innerHTML = `
+                    <label>
+                        <b>SIG ${sigCount}</b>
+                    </label>
+
+                    <textarea>
+${obj.sigDescription}
+</textarea>
+                `;
+
+                const textarea =
+                wrap.querySelector("textarea");
+
+                textarea.addEventListener(
+                    "input",
+                    ()=>{
+                        obj.sigDescription =
+                        textarea.value;
+                    }
+                );
+
+                document.getElementById(
+                    "sigDescriptions"
+                ).appendChild(wrap);
+            }
         });
 
         alert("Imported");
